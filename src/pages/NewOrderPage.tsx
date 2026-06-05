@@ -7,7 +7,7 @@ import { AddItemModal, type AddedLineDraft } from '../components/new-order/AddIt
 import { CustomerSearch } from '../components/new-order/CustomerSearch';
 import { FormSelect } from '../components/sales-order/FormControls';
 import type { Partner } from '../types/api';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, parseNum } from '../utils/format';
 import { resolveWholesaleRate } from '../utils/itemRates';
 import { WAREHOUSES } from '../utils/orderMath';
 

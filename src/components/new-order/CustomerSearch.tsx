@@ -17,9 +17,8 @@ export function CustomerSearch({ location, value, onSelect, disabled }: Customer
   const debounced = useDebouncedValue(query, 300);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const canSearch =
-    debounced.trim().length >= 2 && !disabled && location !== '' && location !== '—';
-  const searchQuery = useQuery<Partner[]>({
+  const canSearch = debounced.trim().length >= 2 && !disabled && location && location !== '—';
+  const searchQuery = useQuery({
     queryKey: ['partner-search', debounced, location],
     queryFn: async () => {
       const q = debounced.trim();
