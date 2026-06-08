@@ -89,7 +89,29 @@ api.interceptors.response.use(
 
 export function getApiErrorMessage(error: unknown): string {
   if (axios.isAxiosError<ApiError>(error)) {
-    return error.response?.data?.error ?? error.message;
+    const data = error.response?.data;
+    const base = data?.error ?? error.message;
+
+    if (data?.details && typeof data.details === 'object') {
+      const flattened = data.details as {
+        formErrors?: string[];
+        fieldErrors?: Record<string, string[]>;
+      };
+      const fieldMsgs = flattened.fieldErrors
+        ? Object.entries(flattened.fieldErrors).flatMap(([field, msgs]) =>
+            msgs.map((m) => `${field}: ${m}`),
+          )
+        : [];
+      const formMsgs = flattened.formErrors ?? [];
+      const detailText = [...formMsgs, ...fieldMsgs].join('; ');
+      if (detailText) return `${base} — ${detailText}`;
+    }
+
+    if (typeof data?.details === 'string') {
+      return `${base} — ${data.details}`;
+    }
+
+    return base;
   }
   if (error instanceof Error) return error.message;
   return 'Something went wrong';
