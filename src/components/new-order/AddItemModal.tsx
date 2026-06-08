@@ -11,9 +11,12 @@ export interface AddedLineDraft {
   itemId: string;
   itemCode: string;
   itemName: string;
+  salesName: string;
   description: string;
   qty: number;
   unitRate: number;
+  discountPct: number;
+  mrp: number;
   stockAvailable: number;
   warehouse: string;
 }
@@ -22,14 +25,24 @@ interface AddItemModalProps {
   open: boolean;
   warehouse: string;
   unitRateForItem: (itemId: string) => number;
+  mrpForItem: (itemId: string) => number;
+  salesNameForItem: (itemId: string) => string;
   onClose: () => void;
   onAdd: (line: AddedLineDraft) => void;
 }
 
-export function AddItemModal({ open, warehouse, unitRateForItem, onClose, onAdd }: AddItemModalProps) {
+export function AddItemModal({
+  open,
+  warehouse,
+  unitRateForItem,
+  mrpForItem,
+  salesNameForItem,
+  onClose,
+  onAdd,
+}: AddItemModalProps) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<ItemSearchResult | null>(null);
-  const [qty, setQty] = useState(1);
+  const [qtyInput, setQtyInput] = useState('1');
   const debounced = useDebouncedValue(query, 200);
 
   const itemsQuery = useQuery({
@@ -42,31 +55,35 @@ export function AddItemModal({ open, warehouse, unitRateForItem, onClose, onAdd 
     if (!open) {
       setQuery('');
       setSelected(null);
-      setQty(1);
+      setQtyInput('1');
     }
   }, [open]);
 
   useEffect(() => {
     setSelected(null);
-    setQty(1);
+    setQtyInput('1');
   }, [warehouse]);
 
   if (!open) return null;
 
+  const qty = parseInt(qtyInput, 10);
+  const qtyValid = Number.isFinite(qty) && qty > 0;
   const stock = selected ? parseNum(selected.qty_on_hand) : 0;
-  const qtyInvalid = qty <= 0;
-  const exceedsStock = Boolean(selected && stock > 0 && qty > stock);
+  const exceedsStock = Boolean(selected && stock > 0 && qtyValid && qty > stock);
   const items = itemsQuery.data ?? [];
 
   function handleAdd() {
-    if (!selected || qtyInvalid || exceedsStock) return;
+    if (!selected || !qtyValid || exceedsStock) return;
     onAdd({
       itemId: selected.id,
       itemCode: selected.code,
       itemName: selected.name,
-      description: selected.name,
+      salesName: salesNameForItem(selected.id),
+      description: salesNameForItem(selected.id) || selected.name,
       qty,
       unitRate: unitRateForItem(selected.id),
+      discountPct: 0,
+      mrp: mrpForItem(selected.id),
       stockAvailable: stock,
       warehouse,
     });
@@ -146,13 +163,21 @@ export function AddItemModal({ open, warehouse, unitRateForItem, onClose, onAdd 
                   type="number"
                   min={1}
                   max={stock > 0 ? stock : undefined}
-                  value={qty}
-                  onChange={(e) => {
-                    const next = parseInt(e.target.value, 10);
-                    setQty(Number.isFinite(next) && next > 0 ? next : 1);
+                  value={qtyInput}
+                  onChange={(e) => setQtyInput(e.target.value)}
+                  onBlur={() => {
+                    const parsed = parseInt(qtyInput, 10);
+                    if (!Number.isFinite(parsed) || parsed <= 0) {
+                      setQtyInput('1');
+                    } else {
+                      setQtyInput(String(parsed));
+                    }
                   }}
                 />
               </label>
+              {!qtyValid && qtyInput !== '' && (
+                <p className="field-hint error">Enter a valid quantity</p>
+              )}
               {exceedsStock && (
                 <p className="field-hint error">Qty exceeds warehouse stock ({stock})</p>
               )}
@@ -165,7 +190,7 @@ export function AddItemModal({ open, warehouse, unitRateForItem, onClose, onAdd 
           <button
             type="button"
             className="btn-primary inline"
-            disabled={!selected || qtyInvalid || exceedsStock}
+            disabled={!selected || !qtyValid || exceedsStock}
             onClick={handleAdd}
           >
             Add to order

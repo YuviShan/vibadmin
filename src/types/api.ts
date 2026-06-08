@@ -43,18 +43,46 @@ export interface Item {
   code: string;
   code_pattern: string | null;
   name: string;
+  sales_name: string | null;
   hsn: string | null;
+  subgroup: string | null;
+  uom: string;
+  uom_conversion: string;
   group_id: string | null;
   group_name: string | null;
   is_inventory: boolean;
   is_purchase: boolean;
   is_sale: boolean;
+  is_active: boolean;
   default_wholesale: string;
   default_mrp: string;
 }
 
+export interface ItemDetail extends Item {
+  has_transactions: boolean;
+  warehouse_stock: { warehouse_code: string; qty_on_hand: string }[];
+}
+
 export interface ItemSearchResult extends Item {
   qty_on_hand: string;
+}
+
+export interface ItemSubgroupMaster {
+  id: string;
+  name: string;
+}
+
+export interface ItemGroupMaster {
+  id: string;
+  name: string;
+  subgroups: ItemSubgroupMaster[];
+}
+
+export interface TerritoryMaster {
+  id: string;
+  state_code: string;
+  branch_name: string;
+  name: string;
 }
 
 export interface Rate {
@@ -95,6 +123,8 @@ export interface Order {
   gst_rate_pct: string;
   gst_amount: string;
   total: string;
+  total_qty?: string;
+  territory?: string | null;
   metadata?: Record<string, unknown>;
   lines?: OrderLine[];
 }

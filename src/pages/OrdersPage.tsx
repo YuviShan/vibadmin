@@ -57,6 +57,16 @@ export function OrdersPage() {
     },
     { key: 'date', header: 'Date', render: (o: Order) => o.order_date },
     { key: 'delivery', header: 'Delivery', render: (o: Order) => o.delivery_date ?? '—' },
+    {
+      key: 'qty',
+      header: 'Qty',
+      render: (o: Order) => parseNum(o.total_qty ?? '0').toLocaleString('en-IN'),
+    },
+    {
+      key: 'territory',
+      header: 'Territory',
+      render: (o: Order) => o.territory ?? (o.metadata?.location as string | undefined) ?? '—',
+    },
     { key: 'total', header: 'Total', render: (o: Order) => formatCurrencyCompact(parseNum(o.total)) },
     {
       key: 'actions',
@@ -114,6 +124,8 @@ export function OrdersPage() {
               <>
                 <span>{o.order_date}</span>
                 {' · '}
+                <span>Qty {parseNum(o.total_qty ?? '0').toLocaleString('en-IN')}</span>
+                {' · '}
                 <strong>{formatCurrencyCompact(parseNum(o.total))}</strong>
               </>
             ),
@@ -123,6 +135,14 @@ export function OrdersPage() {
               { label: 'Partner', render: (o) => `${o.partner_code} — ${o.partner_name}` },
               { label: 'Date', render: (o) => o.order_date },
               { label: 'Delivery', render: (o) => o.delivery_date ?? '—' },
+              {
+                label: 'Qty',
+                render: (o) => parseNum(o.total_qty ?? '0').toLocaleString('en-IN'),
+              },
+              {
+                label: 'Territory',
+                render: (o) => o.territory ?? (o.metadata?.location as string | undefined) ?? '—',
+              },
               { label: 'Total', render: (o) => formatCurrencyCompact(parseNum(o.total)) },
             ],
             editTo: (o) => `/orders/${o.id}`,

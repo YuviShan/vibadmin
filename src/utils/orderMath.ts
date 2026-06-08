@@ -55,13 +55,67 @@ export function computeOrderTotals(
   };
 }
 
+export const TAX_CODE_OPTIONS = [
+  'GST0%',
+  'GST5%',
+  'GST18%',
+  'IGST0%',
+  'IGST5%',
+  'IGST18%',
+] as const;
+
+export type TaxCode = (typeof TAX_CODE_OPTIONS)[number];
+
 export const TAX_CODES: Record<string, number> = {
-  'IGST@5': 5,
-  'IGST@12': 12,
-  'IGST@18': 18,
-  'GST@5': 5,
-  'GST@12': 12,
+  'GST0%': 0,
+  'GST5%': 5,
+  'GST18%': 18,
+  'IGST0%': 0,
+  'IGST5%': 5,
+  'IGST18%': 18,
 };
+
+export function taxRateFromCode(code: string): number {
+  return TAX_CODES[code] ?? 0;
+}
+
+export function isTamilNaduOrder(partnerState: string | null | undefined, location: string): boolean {
+  if (partnerState?.trim().toLowerCase() === 'tamil nadu') return true;
+  if (location.toUpperCase().includes('TAMIL NADU')) return true;
+  if (/^TN-/i.test(location)) return true;
+  return false;
+}
+
+export function defaultTaxCode(
+  partnerState: string | null | undefined,
+  location: string,
+  rate: 0 | 5 | 18 = 5,
+): TaxCode {
+  const prefix = isTamilNaduOrder(partnerState, location) ? 'GST' : 'IGST';
+  return `${prefix}${rate}%` as TaxCode;
+}
+
+export function lineAmount(qty: number, unitRate: number, discountPct: number): number {
+  const gross = qty * unitRate;
+  return Math.round(gross * (1 - discountPct / 100) * 100) / 100;
+}
+
+export function normalizeTaxCode(
+  code: string | undefined,
+  partnerState: string | null | undefined,
+  location: string,
+): TaxCode {
+  if (code && TAX_CODES[code] !== undefined) return code as TaxCode;
+  const legacy: Record<string, TaxCode> = {
+    'IGST@5': 'IGST5%',
+    'IGST@12': 'IGST18%',
+    'IGST@18': 'IGST18%',
+    'GST@5': 'GST5%',
+    'GST@12': 'GST18%',
+  };
+  if (code && legacy[code]) return legacy[code];
+  return defaultTaxCode(partnerState, location, 5);
+}
 
 export const SALES_TYPES = ['Whole Sales', 'Retail', 'Export'] as const;
 export const WAREHOUSES = ['DHB1 WH', 'MAIN WH', 'ERODE WH'] as const;

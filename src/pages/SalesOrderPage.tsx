@@ -6,6 +6,7 @@ import {
   fetchOrder,
   fetchPartners,
   fetchRates,
+  searchItems,
   updateOrder,
 } from '../api/endpoints';
 import { getApiErrorMessage } from '../api/client';
@@ -24,7 +25,9 @@ import {
   lineTax,
   lineTotal,
   LOCATIONS,
+  normalizeTaxCode,
   SALES_TYPES,
+  TAX_CODE_OPTIONS,
   TAX_CODES,
   WAREHOUSES,
 } from '../utils/orderMath';
@@ -73,7 +76,7 @@ function orderToForm(order: Order, partners: Partner[]): { header: OrderHeaderFo
       qty: parseNum(l.qty),
       unitRate: parseNum(l.unit_rate),
       discountPct: lm.discountPct ?? 0,
-      taxCode: lm.taxCode ?? 'IGST@5',
+      taxCode: normalizeTaxCode(lm.taxCode, partner?.state, meta.location ?? partner?.group_name ?? 'TAMIL NADU'),
       warehouse: lm.warehouse ?? header.warehouseCode,
       inStock: lm.inStock ?? 0,
       packedQty: lm.packedQty ?? parseNum(l.qty),
@@ -185,13 +188,38 @@ export function SalesOrderPage() {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['order', order.id] });
-      navigate(`/orders/${order.id}`, { replace: true });
+      navigate('/orders', { replace: true });
     },
     onError: (err) => setSaveError(getApiErrorMessage(err)),
   });
 
   function patchHeader(patch: Partial<OrderHeaderForm>) {
     setHeader((h) => ({ ...h, ...patch }));
+  }
+
+  async function onWarehouseChange(warehouseCode: string) {
+    patchHeader({ warehouseCode });
+    setLines((prev) => prev.map((l) => ({ ...l, warehouse: warehouseCode })));
+
+    const itemLines = lines.filter((l) => l.itemId);
+    if (itemLines.length === 0) return;
+
+    const stockById = new Map<string, number>();
+    await Promise.all(
+      itemLines.map(async (line) => {
+        const results = await searchItems(line.itemCode, warehouseCode);
+        const match = results.find((i) => i.id === line.itemId);
+        stockById.set(line.itemId, match ? parseNum(match.qty_on_hand) : 0);
+      }),
+    );
+
+    setLines((prev) =>
+      prev.map((l) =>
+        l.itemId
+          ? { ...l, warehouse: warehouseCode, inStock: stockById.get(l.itemId) ?? 0 }
+          : l,
+      ),
+    );
   }
 
   function onPartnerChange(partnerId: string) {
@@ -310,7 +338,14 @@ export function SalesOrderPage() {
               <FormInput label="Transporter" value={header.transporter} onChange={(e) => patchHeader({ transporter: e.target.value })} />
             </div>
             <div className="form-grid cols-2 top-gap">
-              <FormInput label="Order no" value={header.orderNo} readOnly />
+              <div className="form-field">
+                <span>Order no</span>
+                <p className="readonly-value">
+                  {header.orderNo && header.orderNo !== 'Auto'
+                    ? header.orderNo
+                    : 'Assigned automatically on save'}
+                </p>
+              </div>
               <FormSelect
                 label="Status"
                 value={header.status}
@@ -325,7 +360,7 @@ export function SalesOrderPage() {
               <FormInput label="Valid until" type="date" value={header.validUntil} onChange={(e) => patchHeader({ validUntil: e.target.value })} />
               <FormInput label="Document date" type="date" value={header.documentDate} onChange={(e) => patchHeader({ documentDate: e.target.value })} />
               <FormInput label="Sales ref no" value={header.salesRefNo} onChange={(e) => patchHeader({ salesRefNo: e.target.value })} />
-              <FormSelect label="Warehouse" value={header.warehouseCode} options={WAREHOUSES} onChange={(e) => patchHeader({ warehouseCode: e.target.value })} />
+              <FormSelect label="Warehouse" value={header.warehouseCode} options={WAREHOUSES} onChange={(e) => void onWarehouseChange(e.target.value)} />
               <FormInput label="Destination" value={header.destination} onChange={(e) => patchHeader({ destination: e.target.value })} />
               <div className="checkbox-row">
                 <FormCheckbox label="H Form" checked={header.hForm} onChange={(v) => patchHeader({ hForm: v })} />
@@ -456,7 +491,7 @@ export function SalesOrderPage() {
           <div className="form-grid cols-2">
             <FormInput label="Transporter" value={header.transporter} onChange={(e) => patchHeader({ transporter: e.target.value })} />
             <FormInput label="Destination" value={header.destination} onChange={(e) => patchHeader({ destination: e.target.value })} />
-            <FormSelect label="Warehouse" value={header.warehouseCode} options={WAREHOUSES} onChange={(e) => patchHeader({ warehouseCode: e.target.value })} />
+            <FormSelect label="Warehouse" value={header.warehouseCode} options={WAREHOUSES} onChange={(e) => void onWarehouseChange(e.target.value)} />
             <FormInput label="Delivery date" type="date" value={header.validUntil} onChange={(e) => patchHeader({ validUntil: e.target.value })} />
           </div>
         </section>
@@ -598,7 +633,7 @@ function LineCardMobile({
         <FormInput label="Qty" type="number" min={0} value={line.qty} onChange={(e) => onChange({ qty: parseNum(e.target.value) })} />
         <FormInput label="Unit price" type="number" min={0} step={0.01} value={line.unitRate} onChange={(e) => onChange({ unitRate: parseNum(e.target.value) })} />
         <FormInput label="Discount %" type="number" min={0} max={100} value={line.discountPct} onChange={(e) => onChange({ discountPct: parseNum(e.target.value) })} />
-        <FormSelect label="Tax code" value={line.taxCode} options={Object.keys(TAX_CODES)} onChange={(e) => onChange({ taxCode: e.target.value })} />
+        <FormSelect label="Tax code" value={line.taxCode} options={[...TAX_CODE_OPTIONS]} onChange={(e) => onChange({ taxCode: e.target.value })} />
       </div>
       <div className="line-card-totals">
         <span>Total: {formatCurrency(total)}</span>

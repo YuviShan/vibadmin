@@ -1,27 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createOrder, fetchItems, fetchPartnerLocations, fetchRates } from '../api/endpoints';
+import { createOrder, fetchItems, fetchPartnerLocations, fetchRates, searchItems } from '../api/endpoints';
 import { getApiErrorMessage } from '../api/client';
 import { AddItemModal, type AddedLineDraft } from '../components/new-order/AddItemModal';
 import { CustomerSearch } from '../components/new-order/CustomerSearch';
 import { FormSelect } from '../components/sales-order/FormControls';
 import type { Partner } from '../types/api';
-import { formatCurrency } from '../utils/format';
-import { resolveWholesaleRate } from '../utils/itemRates';
-import { WAREHOUSES } from '../utils/orderMath';
-
-function nowDateTimeLocal(): string {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-}
-
-function defaultDeliveryDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 5);
-  return d.toISOString().slice(0, 10);
-}
+import { defaultDeliveryDateIst, getIstNow } from '../utils/datetime';
+import { formatCurrency, parseNum } from '../utils/format';
+import { resolveMrpRate, resolveSalesName, resolveWholesaleRate } from '../utils/itemRates';
+import {
+  defaultTaxCode,
+  isTamilNaduOrder,
+  lineAmount,
+  TAX_CODE_OPTIONS,
+  taxRateFromCode,
+  type TaxCode,
+  WAREHOUSES,
+} from '../utils/orderMath';
 
 export function NewOrderPage() {
   const navigate = useNavigate();
@@ -29,9 +26,9 @@ export function NewOrderPage() {
 
   const [location, setLocation] = useState('');
   const [partner, setPartner] = useState<Partner | null>(null);
-  const [orderDateTime, setOrderDateTime] = useState(nowDateTimeLocal);
-  const [deliveryDate, setDeliveryDate] = useState(defaultDeliveryDate);
+  const [deliveryDate, setDeliveryDate] = useState(defaultDeliveryDateIst);
   const [warehouse, setWarehouse] = useState('DHB1 WH');
+  const [taxCode, setTaxCode] = useState<TaxCode>('GST5%');
   const [lines, setLines] = useState<AddedLineDraft[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +52,8 @@ export function NewOrderPage() {
 
   const locations = locationsQuery.data ?? [];
   const activeLocation = location || locations[0] || '';
+  const items = itemsQuery.data ?? [];
+  const partnerRates = ratesQuery.data;
 
   useEffect(() => {
     if (!location && locations.length > 0) {
@@ -62,50 +61,72 @@ export function NewOrderPage() {
     }
   }, [location, locations]);
 
-  const items = itemsQuery.data ?? [];
+  const taxOptions = useMemo(() => {
+    const tn = isTamilNaduOrder(partner?.state, activeLocation);
+    return TAX_CODE_OPTIONS.filter((c) => (tn ? c.startsWith('GST') : c.startsWith('IGST')));
+  }, [partner?.state, activeLocation]);
+
+  useEffect(() => {
+    if (!partner && !activeLocation) return;
+    setTaxCode(defaultTaxCode(partner?.state, activeLocation, 5));
+  }, [partner?.id, partner?.state, activeLocation]);
+
+  useEffect(() => {
+    if (taxOptions.includes(taxCode)) return;
+    setTaxCode(taxOptions[0] ?? 'GST5%');
+  }, [taxOptions, taxCode]);
 
   const totals = useMemo(() => {
-    const subtotal = lines.reduce((s, l) => s + l.qty * l.unitRate, 0);
-    const tax = Math.round(subtotal * 0.05 * 100) / 100;
-    return { subtotal, tax, total: subtotal + tax };
-  }, [lines]);
+    const subtotal = lines.reduce(
+      (s, l) => s + lineAmount(l.qty, l.unitRate, l.discountPct),
+      0,
+    );
+    const gstRatePct = taxRateFromCode(taxCode);
+    const tax = Math.round(subtotal * (gstRatePct / 100) * 100) / 100;
+    return { subtotal, tax, gstRatePct, total: subtotal + tax };
+  }, [lines, taxCode]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!partner) throw new Error('Select a customer');
       if (lines.length === 0) throw new Error('Add at least one item');
-      const orderDate = orderDateTime.slice(0, 10);
+      const { orderDate, orderDateTime } = getIstNow();
       return createOrder({
         partnerId: partner.id,
         orderDate,
         deliveryDate,
         status: 'draft',
-        gstRatePct: 5,
+        gstRatePct: totals.gstRatePct,
         metadata: {
           location: activeLocation,
           orderDateTime,
           warehouseCode: warehouse,
           gstNo: partner.gstin,
-          territory: partner.city,
+          territory: partner.group_name ?? activeLocation,
           destination: partner.city,
           salesType: 'Whole Sales',
+          taxCode,
         },
         lines: lines.map((l) => ({
           itemId: l.itemId,
-          description: l.description,
+          description: l.salesName || l.itemName,
           qty: l.qty,
           unitRate: l.unitRate,
+          discountPct: l.discountPct,
           metadata: {
             warehouse: l.warehouse,
             inStock: l.stockAvailable,
+            mrp: l.mrp,
+            salesName: l.salesName,
+            taxCode,
           },
         })),
       });
     },
-    onSuccess: (order) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      navigate(`/orders/${order.id}`, { replace: true });
+      navigate('/orders', { replace: true });
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
@@ -117,7 +138,15 @@ export function NewOrderPage() {
   }
 
   function unitRateForItem(itemId: string): number {
-    return resolveWholesaleRate(itemId, ratesQuery.data, items);
+    return resolveWholesaleRate(itemId, partnerRates, items);
+  }
+
+  function mrpForItem(itemId: string): number {
+    return resolveMrpRate(itemId, partnerRates, items);
+  }
+
+  function salesNameForItem(itemId: string): string {
+    return resolveSalesName(itemId, partnerRates, items);
   }
 
   function addLine(line: AddedLineDraft) {
@@ -130,9 +159,43 @@ export function NewOrderPage() {
     });
   }
 
+  function updateLine(itemId: string, patch: Partial<AddedLineDraft>) {
+    setLines((prev) => prev.map((l) => (l.itemId === itemId ? { ...l, ...patch } : l)));
+  }
+
+  async function refreshLineStock(warehouseCode: string, currentLines: AddedLineDraft[]) {
+    if (currentLines.length === 0) return;
+    const stockById = new Map<string, number>();
+    await Promise.all(
+      currentLines.map(async (line) => {
+        const results = await searchItems(line.itemCode, warehouseCode);
+        const match = results.find((i) => i.id === line.itemId);
+        stockById.set(line.itemId, match ? parseNum(match.qty_on_hand) : 0);
+      }),
+    );
+    setLines((prev) =>
+      prev.map((l) => ({
+        ...l,
+        warehouse: warehouseCode,
+        stockAvailable: stockById.get(l.itemId) ?? l.stockAvailable,
+      })),
+    );
+  }
+
+  function onWarehouseChange(nextWarehouse: string) {
+    setWarehouse(nextWarehouse);
+    setLines((prev) => {
+      const next = prev.map((l) => ({ ...l, warehouse: nextWarehouse }));
+      void refreshLineStock(nextWarehouse, next);
+      return next;
+    });
+  }
+
   function removeLine(itemId: string) {
     setLines((prev) => prev.filter((l) => l.itemId !== itemId));
   }
+
+  const todayIst = getIstNow().orderDate;
 
   return (
     <div className="page new-order-page">
@@ -172,6 +235,7 @@ export function NewOrderPage() {
               <div><dt>GSTIN</dt><dd>{partner.gstin ?? '—'}</dd></div>
               <div><dt>PAN</dt><dd>{partner.pan ?? '—'}</dd></div>
               <div><dt>City</dt><dd>{partner.city ?? '—'}</dd></div>
+              <div><dt>State</dt><dd>{partner.state ?? '—'}</dd></div>
               <div><dt>Address</dt><dd>{partner.address_line ?? '—'}</dd></div>
               <div><dt>Group</dt><dd>{partner.group_name ?? '—'}</dd></div>
             </dl>
@@ -180,45 +244,51 @@ export function NewOrderPage() {
       </section>
 
       <section className="card so-section">
-        <h2 className="section-title">Dates &amp; warehouse</h2>
+        <h2 className="section-title">Delivery &amp; warehouse</h2>
         <div className="form-grid cols-2">
-          <label className="form-field">
-            <span>Order date &amp; time</span>
-            <input
-              type="datetime-local"
-              value={orderDateTime}
-              onChange={(e) => setOrderDateTime(e.target.value)}
-            />
-          </label>
           <label className="form-field">
             <span>Delivery date</span>
             <input
               type="date"
               value={deliveryDate}
-              min={orderDateTime.slice(0, 10)}
+              min={todayIst}
               onChange={(e) => setDeliveryDate(e.target.value)}
             />
           </label>
           <FormSelect
-            label="Warehouse"
-            value={warehouse}
-            options={WAREHOUSES}
-            onChange={(e) => setWarehouse(e.target.value)}
+            label="Tax"
+            value={taxCode}
+            options={[...taxOptions]}
+            onChange={(e) => setTaxCode(e.target.value as TaxCode)}
           />
         </div>
+        <p className="field-hint">
+          Order date/time is set automatically to IST when you save.
+          {isTamilNaduOrder(partner?.state, activeLocation)
+            ? ' Tamil Nadu orders use GST.'
+            : ' Inter-state orders use IGST.'}
+        </p>
       </section>
 
       <section className="card so-section">
         <div className="section-head">
           <h2 className="section-title">Items</h2>
-          <button
-            type="button"
-            className="btn-secondary sm"
-            disabled={!partner}
-            onClick={() => setModalOpen(true)}
-          >
-            + Add item
-          </button>
+          <div className="section-head-actions">
+            <FormSelect
+              label="Warehouse"
+              value={warehouse}
+              options={WAREHOUSES}
+              onChange={(e) => onWarehouseChange(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn-secondary sm"
+              disabled={!partner}
+              onClick={() => setModalOpen(true)}
+            >
+              + Add item
+            </button>
+          </div>
         </div>
 
         {!partner && <p className="muted">Select a customer first, then add items.</p>}
@@ -228,29 +298,84 @@ export function NewOrderPage() {
         )}
 
         {lines.length > 0 && (
-          <ul className="new-order-lines">
-            {lines.map((line) => (
-              <li key={line.itemId} className="new-order-line">
-                <div>
-                  <strong>{line.itemCode}</strong>
-                  <p>{line.itemName}</p>
-                  <small>
-                    Qty {line.qty} × {formatCurrency(line.unitRate)} · Stock {line.stockAvailable}
-                  </small>
-                </div>
-                <div className="line-actions">
-                  <strong>{formatCurrency(line.qty * line.unitRate)}</strong>
-                  <button type="button" className="btn-icon sm" onClick={() => removeLine(line.itemId)}>×</button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="table-wrap">
+            <table className="data-table compact new-order-lines-table">
+              <thead>
+                <tr>
+                  <th>S.no</th>
+                  <th>Item Name</th>
+                  <th>Sales Name</th>
+                  <th>Qty</th>
+                  <th>Rate</th>
+                  <th>Disc %</th>
+                  <th>Total</th>
+                  <th>MRP</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((line, index) => {
+                  const lineTotal = lineAmount(line.qty, line.unitRate, line.discountPct);
+                  return (
+                    <tr key={line.itemId}>
+                      <td>{index + 1}</td>
+                      <td>
+                        <strong>{line.itemCode}</strong>
+                        <div className="cell-sub">{line.itemName}</div>
+                      </td>
+                      <td>{line.salesName || '—'}</td>
+                      <td>
+                        <input
+                          type="number"
+                          className="table-input"
+                          min={1}
+                          value={line.qty}
+                          onChange={(e) => {
+                            const next = parseInt(e.target.value, 10);
+                            if (Number.isFinite(next) && next > 0) {
+                              updateLine(line.itemId, { qty: next });
+                            }
+                          }}
+                        />
+                      </td>
+                      <td>{formatCurrency(line.unitRate)}</td>
+                      <td>
+                        <input
+                          type="number"
+                          className="table-input"
+                          min={0}
+                          max={100}
+                          step={0.01}
+                          value={line.discountPct}
+                          onChange={(e) => {
+                            updateLine(line.itemId, { discountPct: parseNum(e.target.value) });
+                          }}
+                        />
+                      </td>
+                      <td>{formatCurrency(lineTotal)}</td>
+                      <td>{formatCurrency(line.mrp)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn-icon sm"
+                          aria-label={`Remove ${line.itemCode}`}
+                          onClick={() => removeLine(line.itemId)}
+                        >
+                          ×
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {lines.length > 0 && (
           <div className="new-order-totals">
             <div><span>Subtotal</span><strong>{formatCurrency(totals.subtotal)}</strong></div>
-            <div><span>GST (5%)</span><strong>{formatCurrency(totals.tax)}</strong></div>
+            <div><span>{taxCode}</span><strong>{formatCurrency(totals.tax)}</strong></div>
             <div className="grand"><span>Total</span><strong>{formatCurrency(totals.total)}</strong></div>
           </div>
         )}
@@ -275,6 +400,8 @@ export function NewOrderPage() {
         open={modalOpen}
         warehouse={warehouse}
         unitRateForItem={unitRateForItem}
+        mrpForItem={mrpForItem}
+        salesNameForItem={salesNameForItem}
         onClose={() => setModalOpen(false)}
         onAdd={addLine}
       />

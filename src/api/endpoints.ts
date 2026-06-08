@@ -4,11 +4,14 @@ import type {
   ApiListResponse,
   DashboardSummary,
   Item,
+  ItemDetail,
+  ItemGroupMaster,
   ItemSearchResult,
   LoginResponse,
   Order,
   Partner,
   Rate,
+  TerritoryMaster,
 } from '../types/api';
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
@@ -46,7 +49,7 @@ export async function fetchPartner(id: string): Promise<Partner> {
 }
 
 export interface PartnerPayload {
-  code: string;
+  code?: string;
   partnerType: 'customer' | 'vendor';
   name: string;
   foreignName?: string;
@@ -98,35 +101,92 @@ export async function fetchItems(): Promise<Item[]> {
   return data.data;
 }
 
+export interface WarehouseStockPayload {
+  warehouseCode: string;
+  qty: number;
+}
+
 export interface ItemPayload {
-  code: string;
+  code?: string;
   name: string;
+  salesName?: string;
   hsn?: string;
   groupName?: string;
+  subgroup?: string;
+  uom?: 'Nos' | 'Set' | 'Dozen';
+  uomConversion?: number;
   isInventory?: boolean;
   isPurchase?: boolean;
-  isSale?: boolean;
-  defaultWholesale?: number;
-  defaultMrp?: number;
+  isActive?: boolean;
+  warehouseStock?: WarehouseStockPayload[];
 }
 
-export async function createItem(payload: ItemPayload): Promise<Item> {
-  const { data } = await api.post<ApiItemResponse<Item>>('/items', payload);
+export async function createItem(payload: ItemPayload): Promise<ItemDetail> {
+  const { data } = await api.post<ApiItemResponse<ItemDetail>>('/items', payload);
   return data.data;
 }
 
-export async function fetchItem(id: string): Promise<Item> {
-  const { data } = await api.get<ApiItemResponse<Item>>(`/items/${id}`);
+export async function fetchItem(id: string): Promise<ItemDetail> {
+  const { data } = await api.get<ApiItemResponse<ItemDetail>>(`/items/${id}`);
   return data.data;
 }
 
-export async function updateItem(id: string, payload: Partial<ItemPayload>): Promise<Item> {
-  const { data } = await api.patch<ApiItemResponse<Item>>(`/items/${id}`, payload);
+export async function updateItem(id: string, payload: Partial<ItemPayload>): Promise<ItemDetail> {
+  const { data } = await api.patch<ApiItemResponse<ItemDetail>>(`/items/${id}`, payload);
   return data.data;
 }
 
 export async function deleteItem(id: string): Promise<void> {
   await api.delete(`/items/${id}`);
+}
+
+export async function fetchItemGroupsMaster(): Promise<ItemGroupMaster[]> {
+  const { data } = await api.get<ApiListResponse<ItemGroupMaster>>('/masters/item-groups');
+  return data.data;
+}
+
+export async function createItemGroupMaster(name: string): Promise<ItemGroupMaster> {
+  const { data } = await api.post<ApiItemResponse<ItemGroupMaster>>('/masters/item-groups', { name });
+  return data.data;
+}
+
+export async function createItemSubgroupMaster(
+  groupId: string,
+  name: string,
+): Promise<{ id: string; name: string }> {
+  const { data } = await api.post<ApiItemResponse<{ id: string; name: string }>>(
+    `/masters/item-groups/${groupId}/subgroups`,
+    { name },
+  );
+  return data.data;
+}
+
+export async function fetchTerritoriesMaster(): Promise<TerritoryMaster[]> {
+  const { data } = await api.get<ApiListResponse<TerritoryMaster>>('/masters/territories');
+  return data.data;
+}
+
+export async function createTerritoryMaster(
+  stateCode: string,
+  branchName: string,
+): Promise<TerritoryMaster> {
+  const { data } = await api.post<ApiItemResponse<TerritoryMaster>>('/masters/territories', {
+    stateCode,
+    branchName,
+  });
+  return data.data;
+}
+
+export async function fetchItemGroupNames(): Promise<string[]> {
+  const { data } = await api.get<ApiListResponse<string>>('/masters/item-group-names');
+  return data.data;
+}
+
+export async function fetchSubgroupNames(groupName: string): Promise<string[]> {
+  const { data } = await api.get<ApiListResponse<string>>('/masters/subgroup-names', {
+    params: { groupName },
+  });
+  return data.data;
 }
 
 export interface RatePayload {

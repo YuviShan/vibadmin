@@ -1,6 +1,17 @@
 import type { Item, Rate } from '../types/api';
 import { parseNum } from './format';
 
+export function resolveSalesName(
+  itemId: string,
+  partnerRates: Rate[] | undefined,
+  items: Item[] | undefined,
+): string {
+  const partnerRate = partnerRates?.find((r) => r.item_id === itemId);
+  if (partnerRate?.sales_description) return partnerRate.sales_description;
+  const item = items?.find((i) => i.id === itemId);
+  return item?.sales_name ?? item?.name ?? '';
+}
+
 export function resolveWholesaleRate(
   itemId: string,
   partnerRates: Rate[] | undefined,

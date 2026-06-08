@@ -58,7 +58,7 @@ export function emptyLine(key: string): OrderLineForm {
     qty: 1,
     unitRate: 0,
     discountPct: 0,
-    taxCode: 'IGST@5',
+    taxCode: 'GST5%',
     warehouse: 'DHB1 WH',
     inStock: 0,
     packedQty: 0,

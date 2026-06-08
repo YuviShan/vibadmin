@@ -51,10 +51,8 @@ const CURRENCIES = ['INR', 'USD', 'EUR'] as const;
 type Tab = 'general' | 'address';
 
 interface PartnerFormState {
-  code: string;
   partnerType: 'customer' | 'vendor';
   name: string;
-  foreignName: string;
   groupName: string;
   currency: string;
   gstin: string;
@@ -67,10 +65,8 @@ interface PartnerFormState {
 }
 
 const emptyForm = (): PartnerFormState => ({
-  code: '',
   partnerType: 'customer',
   name: '',
-  foreignName: '',
   groupName: '',
   currency: 'INR',
   gstin: '',
@@ -84,10 +80,8 @@ const emptyForm = (): PartnerFormState => ({
 
 function toPayload(form: PartnerFormState): PartnerPayload {
   return {
-    code: form.code.trim(),
     partnerType: form.partnerType,
     name: form.name.trim(),
-    foreignName: form.foreignName.trim() || undefined,
     groupName: form.groupName.trim() || undefined,
     currency: form.currency || undefined,
     gstin: form.gstin.trim() || undefined,
@@ -108,6 +102,7 @@ export function PartnerFormPage() {
 
   const [tab, setTab] = useState<Tab>('general');
   const [form, setForm] = useState<PartnerFormState>(emptyForm);
+  const [partnerCode, setPartnerCode] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const partnerQuery = useQuery({
@@ -127,10 +122,8 @@ export function PartnerFormPage() {
     const p = partnerQuery.data;
     if (!p) return;
     setForm({
-      code: p.code,
       partnerType: p.partner_type,
       name: p.name,
-      foreignName: p.foreign_name ?? '',
       groupName: p.group_name ?? '',
       currency: p.currency ?? 'INR',
       gstin: p.gstin ?? '',
@@ -141,13 +134,13 @@ export function PartnerFormPage() {
       zipCode: p.zip_code ?? '',
       country: p.country ?? 'India',
     });
+    setPartnerCode(p.code);
   }, [partnerQuery.data]);
 
   const patch = (patch: Partial<PartnerFormState>) => setForm((f) => ({ ...f, ...patch }));
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!form.code.trim()) throw new Error('Code is required');
       if (!form.name.trim()) throw new Error('Name is required');
       const payload = toPayload(form);
       if (isNew) return createPartner(payload);
@@ -204,13 +197,18 @@ export function PartnerFormPage() {
           <section className="card so-section partner-header-card">
             <h2 className="section-title">Identification</h2>
             <div className="form-grid cols-2">
-              <FormInput
-                label="Code"
-                value={form.code}
-                onChange={(e) => patch({ code: e.target.value.toUpperCase() })}
-                placeholder="e.g. MC008134"
-                required
-              />
+              {!isNew && partnerCode && (
+                <div className="form-field">
+                  <span>Code</span>
+                  <p className="readonly-value">{partnerCode}</p>
+                </div>
+              )}
+              {isNew && (
+                <div className="form-field">
+                  <span>Code</span>
+                  <p className="readonly-value muted">Assigned automatically on save</p>
+                </div>
+              )}
               <FormSelect
                 label="Type"
                 value={form.partnerType}
@@ -227,12 +225,6 @@ export function PartnerFormPage() {
                 placeholder="Business name"
                 required
                 className="span-2"
-              />
-              <FormInput
-                label="Foreign name"
-                value={form.foreignName}
-                onChange={(e) => patch({ foreignName: e.target.value })}
-                placeholder="Optional alternate name"
               />
               <label className="form-field">
                 <span>Territory / branch</span>

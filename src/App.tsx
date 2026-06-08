@@ -4,8 +4,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { DashboardPage } from './pages/DashboardPage';
 import { ItemFormPage } from './pages/ItemFormPage';
+import { MastersPage } from './pages/MastersPage';
 import { ItemsPage } from './pages/ItemsPage';
-import { RateFormPage } from './pages/RateFormPage';
 import { LoginPage } from './pages/LoginPage';
 import { NewOrderPage } from './pages/NewOrderPage';
 import { OrdersPage } from './pages/OrdersPage';
@@ -29,8 +29,8 @@ export default function App() {
               <Route path="items" element={<ItemsPage />} />
               <Route path="items/new" element={<ItemFormPage />} />
               <Route path="items/:id" element={<ItemFormPage />} />
+              <Route path="masters" element={<MastersPage />} />
               <Route path="rates" element={<RatesPage />} />
-              <Route path="rates/new" element={<RateFormPage />} />
               <Route path="orders" element={<OrdersPage />} />
               <Route path="orders/new" element={<NewOrderPage />} />
               <Route path="orders/:id" element={<SalesOrderPage />} />

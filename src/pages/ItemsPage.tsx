@@ -27,8 +27,11 @@ export function ItemsPage() {
         <Link to={`/items/${i.id}`} className="link">{i.code}</Link>
       ),
     },
-    { key: 'name', header: 'Name', render: (i: Item) => i.name },
+    { key: 'name', header: 'Item name', render: (i: Item) => i.name },
+    { key: 'sales', header: 'Sales name', render: (i: Item) => i.sales_name ?? '—' },
     { key: 'group', header: 'Group', render: (i: Item) => i.group_name ?? '—' },
+    { key: 'sub', header: 'Subgroup', render: (i: Item) => i.subgroup ?? '—' },
+    { key: 'uom', header: 'UOM', render: (i: Item) => i.uom ?? 'Nos' },
     { key: 'hsn', header: 'HSN', render: (i: Item) => i.hsn ?? '—' },
     {
       key: 'rate',
@@ -40,9 +43,8 @@ export function ItemsPage() {
       header: 'Type',
       render: (i: Item) => (
         <span className="flag-row">
+          {i.is_active ? <span className="pill">Active</span> : <span className="pill muted">Inactive</span>}
           {i.is_inventory && <span className="pill">Inventory</span>}
-          {i.is_purchase && <span className="pill">Purchase</span>}
-          {i.is_sale && <span className="pill">Sale</span>}
         </span>
       ),
     },
