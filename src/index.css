@@ -619,6 +619,15 @@ select {
   min-width: 160px;
 }
 
+.field.inline.grow {
+  flex: 1;
+  min-width: 200px;
+}
+
+.inventory-table .cell-input {
+  width: 72px;
+}
+
 .form-grid {
   display: grid;
   gap: 12px;
@@ -916,7 +925,7 @@ section .field-hint {
     bottom: calc(56px + env(safe-area-inset-bottom));
   }
 
-  .sales-order-page .page-toolbar .toolbar-actions {
+  .sales-order-page:has(.mobile-save-bar) .page-toolbar .toolbar-actions {
     display: none;
   }
 }
@@ -1281,6 +1290,10 @@ section .field-hint {
 }
 
 @media (max-width: 900px) {
+  .sales-order-page:has(.mobile-save-bar) {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+
   .new-order-footer {
     position: fixed;
     left: 0;

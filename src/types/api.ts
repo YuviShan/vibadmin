@@ -67,6 +67,15 @@ export interface ItemSearchResult extends Item {
   qty_on_hand: string;
 }
 
+export interface InventoryRow {
+  id: string;
+  code: string;
+  name: string;
+  uom: string;
+  group_name: string | null;
+  warehouse_stock: { warehouse_code: string; qty_on_hand: string }[];
+}
+
 export interface ItemSubgroupMaster {
   id: string;
   name: string;

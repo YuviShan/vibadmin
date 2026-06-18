@@ -374,6 +374,7 @@ export function SalesOrderPage() {
               <h2 className="section-title">Line items</h2>
               <button type="button" className="btn-secondary sm" onClick={addLine}>+ Add line</button>
             </div>
+            <p className="field-hint">Unit price is fixed on saved orders. Update rates in Rate master for future orders.</p>
 
             <div className="line-table-desktop table-wrap">
               <table className="data-table so-lines-table">
@@ -399,6 +400,7 @@ export function SalesOrderPage() {
                       line={line}
                       items={itemsQuery.data ?? []}
                       gstRatePct={header.gstRatePct}
+                      rateLocked
                       onItemChange={(itemId) =>
                         applyRateToLine(index, itemId, itemsQuery.data ?? [], ratesQuery.data ?? [])
                       }
@@ -418,6 +420,7 @@ export function SalesOrderPage() {
                   line={line}
                   items={itemsQuery.data ?? []}
                   gstRatePct={header.gstRatePct}
+                  rateLocked
                   onItemChange={(itemId) =>
                     applyRateToLine(index, itemId, itemsQuery.data ?? [], ratesQuery.data ?? [])
                   }
@@ -555,6 +558,7 @@ function LineRowDesktop({
   line,
   items,
   gstRatePct,
+  rateLocked = false,
   onItemChange,
   onChange,
   onRemove,
@@ -563,6 +567,7 @@ function LineRowDesktop({
   line: OrderLineForm;
   items: Item[];
   gstRatePct: number;
+  rateLocked?: boolean;
   onItemChange: (itemId: string) => void;
   onChange: (patch: Partial<OrderLineForm>) => void;
   onRemove: () => void;
@@ -584,7 +589,13 @@ function LineRowDesktop({
         <input className="cell-input wide" value={line.tradeName} onChange={(e) => onChange({ tradeName: e.target.value, description: e.target.value })} />
       </td>
       <td><input className="cell-input num" type="number" min={0} step={1} value={line.qty} onChange={(e) => onChange({ qty: parseNum(e.target.value), packedQty: parseNum(e.target.value) })} /></td>
-      <td><input className="cell-input num" type="number" min={0} step={0.01} value={line.unitRate} onChange={(e) => onChange({ unitRate: parseNum(e.target.value) })} /></td>
+      <td>
+        {rateLocked ? (
+          formatCurrency(line.unitRate)
+        ) : (
+          <input className="cell-input num" type="number" min={0} step={0.01} value={line.unitRate} onChange={(e) => onChange({ unitRate: parseNum(e.target.value) })} />
+        )}
+      </td>
       <td><input className="cell-input num" type="number" min={0} max={100} step={0.01} value={line.discountPct} onChange={(e) => onChange({ discountPct: parseNum(e.target.value) })} /></td>
       <td>{formatCurrency(total)}</td>
       <td>{formatCurrency(tax)}</td>
@@ -599,6 +610,7 @@ function LineCardMobile({
   line,
   items,
   gstRatePct,
+  rateLocked = false,
   onItemChange,
   onChange,
   onRemove,
@@ -607,6 +619,7 @@ function LineCardMobile({
   line: OrderLineForm;
   items: Item[];
   gstRatePct: number;
+  rateLocked?: boolean;
   onItemChange: (itemId: string) => void;
   onChange: (patch: Partial<OrderLineForm>) => void;
   onRemove: () => void;
@@ -631,7 +644,14 @@ function LineCardMobile({
       <FormInput label="Trade name" value={line.tradeName} onChange={(e) => onChange({ tradeName: e.target.value, description: e.target.value })} />
       <div className="form-grid cols-2">
         <FormInput label="Qty" type="number" min={0} value={line.qty} onChange={(e) => onChange({ qty: parseNum(e.target.value) })} />
-        <FormInput label="Unit price" type="number" min={0} step={0.01} value={line.unitRate} onChange={(e) => onChange({ unitRate: parseNum(e.target.value) })} />
+        {rateLocked ? (
+          <div className="form-field">
+            <span>Unit price</span>
+            <p className="readonly-value">{formatCurrency(line.unitRate)}</p>
+          </div>
+        ) : (
+          <FormInput label="Unit price" type="number" min={0} step={0.01} value={line.unitRate} onChange={(e) => onChange({ unitRate: parseNum(e.target.value) })} />
+        )}
         <FormInput label="Discount %" type="number" min={0} max={100} value={line.discountPct} onChange={(e) => onChange({ discountPct: parseNum(e.target.value) })} />
         <FormSelect label="Tax code" value={line.taxCode} options={[...TAX_CODE_OPTIONS]} onChange={(e) => onChange({ taxCode: e.target.value })} />
       </div>

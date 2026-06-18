@@ -5,6 +5,7 @@ const navItems = [
   { to: '/', label: 'Home', icon: '⌂', end: true },
   { to: '/partners', label: 'Partners', icon: '👥' },
   { to: '/items', label: 'Items', icon: '📦' },
+  { to: '/inventory', label: 'Stock', icon: '🏷' },
   { to: '/masters', label: 'Masters', icon: '⚙' },
   { to: '/rates', label: 'Rates', icon: '₹' },
   { to: '/orders', label: 'Orders', icon: '🧾' },

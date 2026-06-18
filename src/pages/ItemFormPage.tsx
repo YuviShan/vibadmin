@@ -171,8 +171,8 @@ export function ItemFormPage() {
 
       {locked && (
         <div className="alert alert-warning">
-          This item has sales orders. Code, item name, rate, and MRP are locked. Edit other fields or
-          use Rate master for unchanged pricing only.
+          This item has sales orders. Code and item name are locked here. Update wholesale rate and MRP
+          in Rate master; saved order lines keep their original prices.
         </div>
       )}
       {error && <div className="alert alert-error">{error}</div>}

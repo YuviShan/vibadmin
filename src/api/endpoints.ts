@@ -4,6 +4,7 @@ import type {
   ApiListResponse,
   DashboardSummary,
   Item,
+  InventoryRow,
   ItemDetail,
   ItemGroupMaster,
   ItemSearchResult,
@@ -98,6 +99,22 @@ export async function searchItems(q: string, warehouse: string): Promise<ItemSea
 
 export async function fetchItems(): Promise<Item[]> {
   const { data } = await api.get<ApiListResponse<Item>>('/items');
+  return data.data;
+}
+
+export interface InventoryStockUpdate {
+  itemId: string;
+  warehouseCode: string;
+  qty: number;
+}
+
+export async function fetchInventory(): Promise<InventoryRow[]> {
+  const { data } = await api.get<ApiListResponse<InventoryRow>>('/inventory');
+  return data.data;
+}
+
+export async function updateInventoryStock(updates: InventoryStockUpdate[]): Promise<InventoryRow[]> {
+  const { data } = await api.put<ApiListResponse<InventoryRow>>('/inventory/stock', { updates });
   return data.data;
 }
 

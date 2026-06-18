@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { DashboardPage } from './pages/DashboardPage';
+import { InventoryPage } from './pages/InventoryPage';
 import { ItemFormPage } from './pages/ItemFormPage';
 import { MastersPage } from './pages/MastersPage';
 import { ItemsPage } from './pages/ItemsPage';
@@ -29,6 +30,7 @@ export default function App() {
               <Route path="items" element={<ItemsPage />} />
               <Route path="items/new" element={<ItemFormPage />} />
               <Route path="items/:id" element={<ItemFormPage />} />
+              <Route path="inventory" element={<InventoryPage />} />
               <Route path="masters" element={<MastersPage />} />
               <Route path="rates" element={<RatesPage />} />
               <Route path="orders" element={<OrdersPage />} />

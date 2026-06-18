@@ -29,11 +29,15 @@ function rowIsDirty(row: RateRowState): boolean {
   return row.newWholesale !== row.lastWholesale || row.newMrp !== row.lastMrp;
 }
 
+function isRateItem(item: Item): boolean {
+  return item.is_active !== false && item.is_sale !== false;
+}
+
 function buildRateRows(items: Item[], partnerRates: Rate[]): RateRowState[] {
   const rateByItem = new Map(partnerRates.map((rate) => [rate.item_id, rate]));
 
   return [...items]
-    .filter((item) => item.is_active)
+    .filter(isRateItem)
     .sort((a, b) => a.code.localeCompare(b.code))
     .map((item) => {
       const uom = (item.uom as ItemUom) || 'Nos';
@@ -70,11 +74,13 @@ export function RatesPage() {
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [partnerId, setPartnerId] = useState(params.get('partnerId') ?? '');
-  const [rows, setRows] = useState<RateRowState[]>([]);
+  const [editedRows, setEditedRows] = useState<Map<string, Pick<RateRowState, 'newWholesale' | 'newMrp'>>>(
+    new Map(),
+  );
   const [error, setError] = useState<string | null>(null);
 
   const partnersQuery = useQuery({
-    queryKey: ['partners'],
+    queryKey: ['partners', 'customer'],
     queryFn: () => fetchPartners('customer'),
   });
 
@@ -95,15 +101,23 @@ export function RatesPage() {
   }, [partnerId, setParams]);
 
   useEffect(() => {
-    if (!partnerId) {
-      setRows([]);
-      return;
-    }
-    if (!itemsQuery.data || !ratesQuery.isSuccess) return;
-
-    setRows(buildRateRows(itemsQuery.data, ratesQuery.data));
+    setEditedRows(new Map());
     setError(null);
-  }, [partnerId, itemsQuery.data, ratesQuery.data, ratesQuery.isSuccess]);
+  }, [partnerId]);
+
+  const baseRows = useMemo(() => {
+    if (!partnerId || !itemsQuery.isSuccess || !ratesQuery.isSuccess) return [];
+    return buildRateRows(itemsQuery.data, ratesQuery.data ?? []);
+  }, [partnerId, itemsQuery.isSuccess, itemsQuery.data, ratesQuery.isSuccess, ratesQuery.data]);
+
+  const rows = useMemo(
+    () =>
+      baseRows.map((row) => {
+        const edits = editedRows.get(row.itemId);
+        return edits ? { ...row, ...edits } : row;
+      }),
+    [baseRows, editedRows],
+  );
 
   const hasChanges = useMemo(() => rows.some(rowIsDirty), [rows]);
 
@@ -127,19 +141,30 @@ export function RatesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rates', partnerId] });
       queryClient.invalidateQueries({ queryKey: ['items'] });
+      setEditedRows(new Map());
       setError(null);
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
 
   function updateRow(itemId: string, patch: Partial<Pick<RateRowState, 'newWholesale' | 'newMrp'>>) {
-    setRows((current) =>
-      current.map((row) => (row.itemId === itemId ? { ...row, ...patch } : row)),
-    );
+    setEditedRows((current) => {
+      const next = new Map(current);
+      const base = baseRows.find((row) => row.itemId === itemId);
+      const existing = next.get(itemId) ?? {
+        newWholesale: base?.newWholesale ?? '',
+        newMrp: base?.newMrp ?? '',
+      };
+      next.set(itemId, { ...existing, ...patch });
+      return next;
+    });
   }
 
-  const isLoading = Boolean(partnerId) && (itemsQuery.isLoading || ratesQuery.isLoading);
+  const isLoading =
+    Boolean(partnerId) &&
+    (itemsQuery.isLoading || ratesQuery.isLoading || itemsQuery.isFetching || ratesQuery.isFetching);
   const loadError = itemsQuery.error ?? ratesQuery.error;
+  const catalogCount = itemsQuery.data?.filter(isRateItem).length ?? 0;
 
   return (
     <div className="page sales-order-page">
@@ -147,6 +172,9 @@ export function RatesPage() {
         <div className="page-header compact">
           <span className="badge">Pricing</span>
           <h1>Rate master</h1>
+          {partnerId && !isLoading && (
+            <p className="muted filter-note">{rows.length} items for this partner</p>
+          )}
         </div>
         <div className="toolbar-actions">
           {hasChanges && (
@@ -199,7 +227,11 @@ export function RatesPage() {
       {partnerId && !isLoading && !loadError && (
         <section className="card so-section">
           {rows.length === 0 ? (
-            <p className="muted">No items in the catalog. Add items first.</p>
+            <p className="muted">
+              {catalogCount === 0
+                ? 'No active sale items in the catalog. Add items first.'
+                : 'Could not build rate rows for this partner. Try refreshing the page.'}
+            </p>
           ) : (
             <>
               <div className="table-wrap">
@@ -267,6 +299,23 @@ export function RatesPage() {
             </>
           )}
         </section>
+      )}
+
+      {hasChanges && (
+        <div className="mobile-save-bar">
+          <span className="small muted">Unsaved rate changes</span>
+          <button
+            type="button"
+            className="btn-primary inline"
+            disabled={saveMutation.isPending}
+            onClick={() => {
+              setError(null);
+              saveMutation.mutate();
+            }}
+          >
+            {saveMutation.isPending ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
       )}
     </div>
   );
